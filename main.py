@@ -5,6 +5,7 @@ from agent import QLearningAgent, SarsaAgent
 
 def train(agent_class, env, episodes=500):
     rewards_history = []
+    steps_history = []
     # Initialize agent with alpha=0.1, gamma=0.9, epsilon=0.1
     agent = agent_class(alpha=0.1, gamma=0.9, epsilon=0.1)
     
@@ -12,6 +13,7 @@ def train(agent_class, env, episodes=500):
         state = env.reset()
         action = agent.choose_action(state)
         total_reward = 0
+        steps = 0
         done = False
         
         while not done:
@@ -26,10 +28,12 @@ def train(agent_class, env, episodes=500):
             state = next_state
             action = next_action
             total_reward += reward
+            steps += 1
             
         rewards_history.append(total_reward)
+        steps_history.append(steps)
         
-    return agent, np.array(rewards_history)
+    return agent, np.array(rewards_history), np.array(steps_history)
 
 def get_path(agent, env):
     path = []
@@ -70,6 +74,48 @@ def plot_rewards(q_rewards, sarsa_rewards, episodes, smoothing_window=10):
     plt.savefig('rewards_comparison.png')
     print("Saved reward plot to rewards_comparison.png")
 
+def plot_steps(q_steps, sarsa_steps, episodes, smoothing_window=10):
+    if episodes > smoothing_window:
+        q_smooth = np.convolve(q_steps, np.ones(smoothing_window)/smoothing_window, mode='valid')
+        sarsa_smooth = np.convolve(sarsa_steps, np.ones(smoothing_window)/smoothing_window, mode='valid')
+    else:
+        q_smooth = q_steps
+        sarsa_smooth = sarsa_steps
+        
+    plt.figure(figsize=(10, 6))
+    plt.plot(q_smooth, label='Q-learning', alpha=0.8)
+    plt.plot(sarsa_smooth, label='SARSA', alpha=0.8)
+    plt.title('Steps per Episode (Smoothed)')
+    plt.xlabel(f'Episodes (Moving Average Window={smoothing_window})')
+    plt.ylabel('Steps (Lower is better)')
+    # Cap the Y-axis to avoid massive variations from early episodes ruining the plot scale
+    plt.ylim(0, min(500, max(np.max(q_smooth), np.max(sarsa_smooth)))) 
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('steps_comparison.png')
+    print("Saved steps plot to steps_comparison.png")
+
+def plot_value_heatmaps(q_agent, sarsa_agent):
+    # Calculate V(s) = max_a Q(s,a)
+    # Shape is (12, 4, 4) -> np.max gets (12, 4). Transpose to (4, 12) for intuitive rendering
+    q_V = np.max(q_agent.q_table, axis=2).T
+    sarsa_V = np.max(sarsa_agent.q_table, axis=2).T
+    
+    # We want origin='lower' so y=0 is at the bottom
+    fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+    
+    im1 = axes[0].imshow(q_V, origin='lower', cmap='viridis', aspect='equal')
+    axes[0].set_title("Q-Learning Value $V(s) = \max_a Q(s,a)$")
+    fig.colorbar(im1, ax=axes[0])
+    
+    im2 = axes[1].imshow(sarsa_V, origin='lower', cmap='viridis', aspect='equal')
+    axes[1].set_title("SARSA Value $V(s) = \max_a Q(s,a)$")
+    fig.colorbar(im2, ax=axes[1])
+    
+    plt.tight_layout()
+    plt.savefig('value_heatmaps.png')
+    print("Saved heatmaps to value_heatmaps.png")
+
 def print_path(path, name):
     print(f"\n{name} Path Visualized:")
     # Create an empty grid representation
@@ -94,10 +140,12 @@ def print_path(path, name):
 if __name__ == '__main__':
     env = CliffWalkingEnv()
     episodes = 500
-    runs = 50
+    runs = 30 # Reduced for faster execution of multiple figures
     
     q_rewards_all = np.zeros((runs, episodes))
     sarsa_rewards_all = np.zeros((runs, episodes))
+    q_steps_all = np.zeros((runs, episodes))
+    sarsa_steps_all = np.zeros((runs, episodes))
     
     print(f"Running {runs} independent trials to compute average performance...")
     
@@ -107,19 +155,25 @@ if __name__ == '__main__':
             
         # We don't fix the seed here so each run explores differently
         
-        q_agent, q_rewards = train(QLearningAgent, env, episodes)
+        q_agent, q_rewards, q_steps = train(QLearningAgent, env, episodes)
         # Clip extreme negative rewards for clearer visualization on Y axis
         q_rewards_all[r] = np.clip(q_rewards, -100, 0) 
+        q_steps_all[r] = q_steps
         
-        sarsa_agent, sarsa_rewards = train(SarsaAgent, env, episodes)
+        sarsa_agent, sarsa_rewards, sarsa_steps = train(SarsaAgent, env, episodes)
         sarsa_rewards_all[r] = np.clip(sarsa_rewards, -100, 0)
+        sarsa_steps_all[r] = sarsa_steps
     
     print("Averaging results across all trials...")
     mean_q_rewards = np.mean(q_rewards_all, axis=0)
     mean_sarsa_rewards = np.mean(sarsa_rewards_all, axis=0)
+    mean_q_steps = np.mean(q_steps_all, axis=0)
+    mean_sarsa_steps = np.mean(sarsa_steps_all, axis=0)
     
-    # Plot curves (Using a smaller smoothing window since 50 runs already smooths the noise)
+    # Plot curves
     plot_rewards(mean_q_rewards, mean_sarsa_rewards, episodes, smoothing_window=5)
+    plot_steps(mean_q_steps, mean_sarsa_steps, episodes, smoothing_window=5)
+    plot_value_heatmaps(q_agent, sarsa_agent)
     
     # Get and print paths from the last trained agents as a visual example
     q_path = get_path(q_agent, env)
