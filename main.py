@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from env import CliffWalkingEnv
 from agent import QLearningAgent, SarsaAgent
 
@@ -137,6 +138,57 @@ def print_path(path, name):
     for y in reversed(range(4)):
         print(' '.join(grid[y]))
 
+def plot_paths(q_path, sarsa_path):
+    fig, axes = plt.subplots(2, 1, figsize=(10, 6))
+    
+    paths = [(q_path, 'Q-Learning Optimal Path (Risky)'), (sarsa_path, 'SARSA Optimal Path (Safe)')]
+    
+    for i, (path, title) in enumerate(paths):
+        ax = axes[i]
+        ax.set_xlim(0, 12)
+        ax.set_ylim(0, 4)
+        ax.set_xticks(np.arange(0, 13, 1))
+        ax.set_yticks(np.arange(0, 5, 1))
+        
+        # Add faint background grid
+        ax.grid(True, color='gray', linestyle='--', linewidth=0.5)
+        
+        # Color cliff region (red)
+        cliff_rect = patches.Rectangle((1, 0), 10, 1, facecolor='salmon', alpha=0.5)
+        ax.add_patch(cliff_rect)
+        ax.text(6, 0.5, 'CLIFF', ha='center', va='center', color='darkred', fontweight='bold', fontsize=12)
+        
+        # Start and goal regions (green)
+        start_rect = patches.Rectangle((0, 0), 1, 1, facecolor='lightgreen', alpha=0.5)
+        ax.add_patch(start_rect)
+        ax.text(0.5, 0.5, 'START', ha='center', va='center', fontweight='bold')
+        
+        goal_rect = patches.Rectangle((11, 0), 1, 1, facecolor='lightgreen', alpha=0.5)
+        ax.add_patch(goal_rect)
+        ax.text(11.5, 0.5, 'GOAL', ha='center', va='center', fontweight='bold')
+        
+        # Determine center points of each cell in the path
+        path_x = [p[0] + 0.5 for p in path]
+        path_y = [p[1] + 0.5 for p in path]
+        
+        # Plot lines
+        ax.plot(path_x, path_y, marker='o', markersize=6, color='blue', linewidth=3, alpha=0.6)
+        
+        # Add directional arrows
+        for j in range(len(path_x) - 1):
+            ax.annotate('', xy=(path_x[j+1], path_y[j+1]), xytext=(path_x[j], path_y[j]),
+                        arrowprops=dict(arrowstyle="->", color="darkblue", lw=2))
+        
+        ax.set_title(title, fontweight='bold')
+        # Formatting
+        ax.set_aspect('equal')
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        
+    plt.tight_layout()
+    plt.savefig('optimal_paths.png')
+    print("Saved visual path plots to optimal_paths.png")
+
 if __name__ == '__main__':
     env = CliffWalkingEnv()
     episodes = 500
@@ -175,10 +227,14 @@ if __name__ == '__main__':
     plot_steps(mean_q_steps, mean_sarsa_steps, episodes, smoothing_window=5)
     plot_value_heatmaps(q_agent, sarsa_agent)
     
-    # Get and print paths from the last trained agents as a visual example
+    # Get paths from the last trained agents
     q_path = get_path(q_agent, env)
     sarsa_path = get_path(sarsa_agent, env)
     
+    # Print plain text paths
     print_path(q_path, "Q-Learning (Example from final run)")
     print_path(sarsa_path, "SARSA (Example from final run)")
+    
+    # Plot graphical paths
+    plot_paths(q_path, sarsa_path)
     print("\nTraining and evaluation complete.")
